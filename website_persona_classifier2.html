@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website Persona Classifier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .loader {
+            border-top-color: #4f46e5;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-2xl mx-auto">
+        <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-slate-900">Website Persona Classifier</h1>
+                <p class="text-slate-500 mt-2">Enter a URL to analyze its developer ecosystem and engineering quality.</p>
+            </div>
+
+            <!-- Input Section -->
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input type="text" id="urlInput" placeholder="e.g., figma.com" class="flex-grow p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow">
+                <button id="analyzeBtn" class="bg-indigo-600 text-white font-semibold p-3 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
+                    Analyze
+                </button>
+            </div>
+            <p id="error-message" class="text-red-500 text-sm mt-2 text-center hidden"></p>
+            <p class="text-xs text-slate-400 mt-2 text-center">Note: This is a demonstration tool. Analysis is based on a model trained on our top 1K website dataset.</p>
+
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="mt-8 hidden">
+             <!-- Loader -->
+            <div id="loader" class="flex justify-center items-center my-8 hidden">
+                <div class="loader w-12 h-12 border-4 border-slate-200 rounded-full"></div>
+            </div>
+            
+            <div id="resultsContent" class="hidden">
+                <!-- Main Classification Card -->
+                <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200 fade-in">
+                    <h2 class="text-sm font-semibold text-indigo-600 uppercase">Classification</h2>
+                    <p class="text-2xl font-bold text-slate-900 mt-1" id="finalPersona"></p>
+                    <p class="text-slate-500 mt-1" id="personaDescription"></p>
+                </div>
+
+                <!-- Detailed Breakdown -->
+                <div class="grid md:grid-cols-2 gap-6 mt-6 fade-in" style="animation-delay: 0.1s;">
+                    <!-- Purpose Card -->
+                    <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
+                        <h3 class="text-lg font-semibold text-slate-900">Purpose</h3>
+                        <p class="text-slate-500 mt-2" id="purpose"></p>
+                    </div>
+                    <!-- Engineering Quality Card -->
+                    <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
+                        <h3 class="text-lg font-semibold text-slate-900">Engineering Quality</h3>
+                        <p class="text-slate-500 mt-2" id="quality"></p>
+                    </div>
+                    <!-- Technology Card -->
+                    <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200 md:col-span-2">
+                        <h3 class="text-lg font-semibold text-slate-900">Technology Stack</h3>
+                        <div class="text-slate-500 mt-2 space-y-1" id="technology"></div>
+                    </div>
+                     <!-- Ecosystem Focus Card -->
+                    <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200 md:col-span-2">
+                        <h3 class="text-lg font-semibold text-slate-900">Ecosystem Focus</h3>
+                        <p class="text-slate-500 mt-2" id="ecosystem"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- UI Elements ---
+    const urlInput = document.getElementById('urlInput');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const resultsSection = document.getElementById('resultsSection');
+    const resultsContent = document.getElementById('resultsContent');
+    const loader = document.getElementById('loader');
+    const errorMessage = document.getElementById('error-message');
+
+    // --- Result Display Elements ---
+    const finalPersonaEl = document.getElementById('finalPersona');
+    const personaDescriptionEl = document.getElementById('personaDescription');
+    const purposeEl = document.getElementById('purpose');
+    const qualityEl = document.getElementById('quality');
+    const technologyEl = document.getElementById('technology');
+    const ecosystemEl = document.getElementById('ecosystem');
+
+    const personaDescriptions = {
+        'Platform Builders': 'A foundational giant providing the ecosystem for others to build upon.',
+        'Marketplaces & Stores': 'A site focused on e-commerce and facilitating transactions.',
+        'Community Hubs': 'A platform driven by user-generated content and social interaction.',
+        'Digital Tool Providers': 'A Software-as-a-Service (SaaS) application providing a specific tool or service.',
+        'Major Publishers': 'A content-driven site focused on creating and distributing information like news or media.',
+        'Essential Resources': 'A foundational source of information, often a government, academic, or non-profit site.'
+    };
+
+    analyzeBtn.addEventListener('click', analyzeWebsite);
+    urlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            analyzeWebsite();
+        }
+    });
+
+    function analyzeWebsite() {
+        const url = urlInput.value.trim();
+        if (!isValidUrl(url)) {
+            showError('Please enter a valid website domain (e.g., example.com).');
+            return;
+        }
+
+        clearError();
+        resultsSection.classList.remove('hidden');
+        resultsContent.classList.add('hidden');
+        loader.classList.remove('hidden');
+
+        // Simulate the asynchronous analysis pipeline
+        setTimeout(() => {
+            const domain = new URL(`http://${url.replace(/^https?:\/\//, '')}`).hostname;
+            const results = runClassificationPipeline(domain);
+            displayResults(results);
+
+            loader.classList.add('hidden');
+            resultsContent.classList.remove('hidden');
+        }, 1500); // Simulate network latency and analysis time
+    }
+
+    function isValidUrl(string) {
+        return /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(string);
+    }
+    
+    function showError(message) {
+        errorMessage.textContent = message;
+        errorMessage.classList.remove('hidden');
+    }
+
+    function clearError() {
+        errorMessage.classList.add('hidden');
+    }
+
+    function displayResults(results) {
+        finalPersonaEl.textContent = `${results.qualityTier} ${results.persona}`;
+        personaDescriptionEl.textContent = personaDescriptions[results.persona] || 'A unique website with a distinct purpose.';
+        purposeEl.textContent = results.purpose;
+        qualityEl.innerHTML = `<strong>Tier:</strong> ${results.qualityTier}<br><span class="text-sm"><strong>Signals:</strong> ${results.qualitySignals}</span>`;
+        
+        technologyEl.innerHTML = `
+            <div><strong>Frontend:</strong> ${results.technology.frontend}</div>
+            <div><strong>Backend:</strong> ${results.technology.backend}</div>
+            <div><strong>Database:</strong> ${results.technology.database}</div>
+            <div><strong>CMS:</strong> ${results.technology.cms}</div>
+        `;
+
+        ecosystemEl.textContent = `Level ${results.ecosystemFocus}. ${results.ecosystemSignals}`;
+    }
+
+    // --- SIMULATED ANALYSIS PIPELINE ---
+    function runClassificationPipeline(domain) {
+        const tech = getDetailedTechStack(domain);
+        const purpose = getPurpose(domain);
+        const ecosystem = getEcosystemFocus(domain);
+        const quality = getEngineeringQuality(domain, tech);
+
+        let persona = 'Major Publishers'; // Default
+        if (purpose.includes('Transactional') && (purpose.includes('E-commerce') || purpose.includes('Marketplace'))) persona = 'Marketplaces & Stores';
+        else if (purpose.includes('SaaS') || purpose.includes('Tool')) persona = 'Digital Tool Providers';
+        else if (purpose.includes('Community') || purpose.includes('Social')) persona = 'Community Hubs';
+        else if (purpose.includes('Informational') && (purpose.includes('Government') || purpose.includes('Reference'))) persona = 'Essential Resources';
+        else if (ecosystem.focus >= 4) persona = 'Platform Builders';
+
+        return {
+            persona: persona,
+            qualityTier: quality.tier,
+            purpose: purpose,
+            technology: tech,
+            ecosystemFocus: ecosystem.focus,
+            ecosystemSignals: ecosystem.signals,
+            qualitySignals: quality.signals
+        };
+    }
+
+    // Stage 1: Technographic Profiling (Simulated)
+    function getDetailedTechStack(domain) {
+        if (domain.includes('google') || domain.includes('youtube')) return { frontend: 'Custom JS (Wiz)', backend: 'C++, Java, Go', database: 'Custom (Spanner)', cms: 'Custom'};
+        if (domain.includes('facebook') || domain.includes('instagram')) return { frontend: 'React', backend: 'Hack (PHP), Python', database: 'Cassandra', cms: 'Custom'};
+        if (domain.includes('wordpress.com')) return { frontend: 'React', backend: 'PHP', database: 'MariaDB', cms: 'WordPress (Headless)'};
+        if (domain.includes('nytimes.com')) return { frontend: 'React, Svelte', backend: 'Go, Node.js', database: 'PostgreSQL', cms: 'Custom (Headless)'};
+        if (domain.includes('wikipedia.org')) return { frontend: 'jQuery', backend: 'PHP', database: 'MariaDB', cms: 'MediaWiki'};
+        if (domain.includes('amazon') || domain.includes('ebay')) return { frontend: 'Custom JS', backend: 'Java, Perl', database: 'DynamoDB, Oracle', cms: 'Custom'};
+        if (domain.includes('shopify')) return { frontend: 'React', backend: 'Ruby on Rails', database: 'MySQL', cms: 'Custom'};
+        if (domain.includes('figma')) return { frontend: 'React, WebAssembly', backend: 'Go, Rust', database: 'PostgreSQL', cms: 'Custom'};
+        if (domain.includes('canva')) return { frontend: 'React', backend: 'Java', database: 'MySQL', cms: 'Custom'};
+        if (domain.includes('.gov') || domain.includes('.edu')) return { frontend: 'JavaScript', backend: 'PHP', database: 'MySQL', cms: 'Drupal or Sitecore'};
+        return { frontend: 'React/Vue', backend: 'Node.js/PHP', database: 'MySQL/PostgreSQL', cms: 'WordPress or Custom' };
+    }
+
+    // Stage 2: Purpose & Business Model Analysis (Simulated)
+    function getPurpose(domain) {
+        if (domain.includes('amazon') || domain.includes('ebay') || domain.includes('walmart')) return 'Transactional / E-commerce Marketplace';
+        if (domain.includes('figma') || domain.includes('hubspot') || domain.includes('canva')) return 'Transactional / B2B SaaS';
+        if (domain.includes('facebook') || domain.includes('reddit') || domain.includes('tiktok')) return 'Community / Social Network (Ad-driven)';
+        if (domain.includes('nytimes') || domain.includes('bbc') || domain.includes('cnn')) return 'Informational / Publishing (Subscription & Ads)';
+        if (domain.includes('.gov') || domain.includes('wikipedia')) return 'Informational / Government or Non-Profit Reference';
+        if (domain.includes('google') || domain.includes('microsoft')) return 'Multi-sided Platform (Ads, Cloud, SaaS)';
+        return 'Informational / Content Publishing';
+    }
+    
+    // Stage 3: Ecosystem Focus Scan (Simulated)
+    function getEcosystemFocus(domain) {
+        if (domain.includes('google') || domain.includes('microsoft') || domain.includes('aws.amazon')) return { focus: 4, signals: 'Comprehensive developer portals, extensive APIs/SDKs.' };
+        if (domain.includes('shopify') || domain.includes('salesforce') || domain.includes('github')) return { focus: 3, signals: 'Mature partner platform, App Store, DevRel team.' };
+        if (domain.includes('nytimes') || domain.includes('nasa.gov')) return { focus: 2, signals: 'Formal developer portal with specific data APIs.' };
+        if (domain.includes('reddit') || domain.includes('twitter') || domain.includes('facebook')) return { focus: 3, signals: 'Managed APIs for partners and marketers.' };
+        return { focus: 1, signals: 'Minimal or no public-facing developer tools.' };
+    }
+
+    // Stage 4: Internal Engineering Quality Assessment (Simulated)
+    function getEngineeringQuality(domain, tech) {
+        let score = 0;
+        let signals = [];
+
+        if (tech.cms.toLowerCase().includes('headless') || tech.frontend.toLowerCase().includes('webassembly') || tech.backend.toLowerCase().includes('custom')) {
+            score += 2;
+            signals.push('Custom/Headless Architecture');
+        } else if (tech.frontend.toLowerCase().includes('react') || tech.backend.toLowerCase().includes('go')) {
+            score += 1;
+            signals.push('Modern Standard Tech');
+        } else {
+             signals.push('Legacy or Monolithic Tech');
+        }
+        
+         if (['google', 'facebook', 'amazon', 'netflix', 'microsoft', 'figma', 'shopify'].some(d => domain.includes(d))) {
+            score += 2;
+            signals.push('Hires for specialized roles (SRE, Platform Eng)');
+        } else if (['nytimes', 'bbc', 'walmart', 'ebay', 'reddit'].some(d => domain.includes(d))) {
+             score +=1;
+             signals.push('Professional engineering team');
+        } else {
+             signals.push('Standard development team');
+        }
+        
+        if (score >= 3) return { tier: 'Expert', signals: signals.join(', ') };
+        if (score >= 1) return { tier: 'Advanced', signals: signals.join(', ') };
+        return { tier: 'Basic', signals: signals.join(', ') };
+    }
+
+</script>
+</body>
+</html>
